@@ -15,7 +15,6 @@ import {
   Medal,
   Pencil,
   X,
-  Save,
   UserPlus,
   BarChart3,
   FileText,
@@ -34,7 +33,6 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
   // Add participant form
   const [showAdd, setShowAdd]           = useState(false);
   const [newName, setNewName]           = useState("");
-  const [newEmail, setNewEmail]         = useState("");
   const [newScores, setNewScores]       = useState({});
   const [addingParticipant, setAddingP] = useState(false);
 
@@ -63,8 +61,8 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
 
   /* ── Add participant ── */
   const handleAdd = async () => {
-    if (!newName.trim() || !newEmail.trim()) {
-      toast.error("Name and email are required");
+    if (!newName.trim()) {
+      toast.error("Name is required");
       return;
     }
     setAddingP(true);
@@ -76,11 +74,11 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
       const res = await fetch(`/api/scorecards/${scorecardId}/participants`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantName: newName, participantEmail: newEmail, scores }),
+        body: JSON.stringify({ participantName: newName, scores }),
       });
       if (!res.ok) throw new Error("Failed to add participant");
       setScorecard(await res.json());
-      setNewName(""); setNewEmail(""); setNewScores({});
+      setNewName(""); setNewScores({});
       setShowAdd(false);
       toast.success("Participant added!");
     } catch (e) {
@@ -90,25 +88,104 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
     }
   };
 
-  /* ── Save scores ── */
-  const handleSaveScores = async () => {
+  /* ── Add score (delta added to current) ── */
+  const handleAddScore = async () => {
     setSaving(true);
     try {
-      const scores = scorecard.categories.map((c) => ({
-        categoryName: c.name,
-        score: parseFloat(editScores[c.name]) || 0,
-      }));
+      const participant = scorecard.participants[editIdx];
+      let hasErrors = false;
+      const errorMessages = [];
+      
+      const scores = scorecard.categories.map((c) => {
+        const current = participant.scores.find((s) => s.categoryName === c.name)?.score ?? 0;
+        const delta = parseFloat(editScores[c.name]) || 0;
+        let newScore = current + delta;
+        
+        // Validate max score
+        if (c.hasMaxScore && newScore > c.maxScore) {
+          hasErrors = true;
+          errorMessages.push(`${c.name} would exceed max score (${c.maxScore})`);
+          newScore = c.maxScore;
+        }
+        
+        // Only apply floor if negative marking is disabled
+        if (!c.negativeMarking) {
+          if (newScore < 0) {
+            hasErrors = true;
+            errorMessages.push(`${c.name} cannot go below 0`);
+            newScore = 0;
+          }
+        }
+        
+        return { categoryName: c.name, score: newScore };
+      });
+      
+      if (hasErrors) {
+        toast.error(errorMessages.join(" | "));
+        setSaving(false);
+        return;
+      }
+      
       const res = await fetch(`/api/scorecards/${scorecardId}/participants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ participantIndex: editIdx, scores }),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) throw new Error("Failed to add score");
       setScorecard(await res.json());
-      setEditIdx(null); setEditScores({});
-      toast.success("Scores saved!");
+      setEditIdx(null);
+      setEditScores({});
+      toast.success("Score added!");
     } catch (e) {
-      toast.error("Failed to save scores");
+      toast.error(e.message || "Failed to add score");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── Deduct score (delta subtracted from current) ── */
+  const handleDeductScore = async () => {
+    setSaving(true);
+    try {
+      const participant = scorecard.participants[editIdx];
+      let hasErrors = false;
+      const errorMessages = [];
+      
+      const scores = scorecard.categories.map((c) => {
+        const current = participant.scores.find((s) => s.categoryName === c.name)?.score ?? 0;
+        const delta = parseFloat(editScores[c.name]) || 0;
+        let newScore = current - delta;
+        
+        // Only apply floor if negative marking is disabled
+        if (!c.negativeMarking) {
+          if (newScore < 0) {
+            hasErrors = true;
+            errorMessages.push(`${c.name} cannot go below 0`);
+            newScore = 0;
+          }
+        }
+        
+        return { categoryName: c.name, score: newScore };
+      });
+      
+      if (hasErrors) {
+        toast.error(errorMessages.join(" | "));
+        setSaving(false);
+        return;
+      }
+      
+      const res = await fetch(`/api/scorecards/${scorecardId}/participants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantIndex: editIdx, scores }),
+      });
+      if (!res.ok) throw new Error("Failed to deduct score");
+      setScorecard(await res.json());
+      setEditIdx(null);
+      setEditScores({});
+      toast.success("Score deducted!");
+    } catch (e) {
+      toast.error(e.message || "Failed to deduct score");
     } finally {
       setSaving(false);
     }
@@ -158,7 +235,10 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
   if (!scorecard)
     return <div className="text-center py-16 text-muted-foreground">Scorecard not found</div>;
 
-  const maxTotal   = scorecard.categories.reduce((s, c) => s + c.maxScore, 0);
+  const maxTotal   = scorecard.categories.reduce(
+    (s, c) => s + (c.hasMaxScore ? c.maxScore : 0),
+    0,
+  );
   const statusCfg  = STATUS_CONFIG[scorecard.status] || STATUS_CONFIG.draft;
   const RANK_BADGE = ["🥇", "🥈", "🥉"];
 
@@ -186,7 +266,10 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
             <div className="flex flex-wrap gap-1.5">
               {scorecard.categories.map((c, i) => (
                 <span key={i} className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-medium">
-                  {c.name} <span className="text-muted-foreground">/ {c.maxScore}</span>
+                  {c.name}
+                  {c.hasMaxScore && (
+                    <span className="text-muted-foreground"> / {c.maxScore}</span>
+                  )}
                 </span>
               ))}
               <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs font-semibold text-purple-400">
@@ -219,7 +302,7 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
       {scorecard.participants.length === 0 && !showAdd && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { icon: UserPlus,  step: "1", title: "Add Participants", desc: "Click 'Add Participant' below and enter their name & email" },
+            { icon: UserPlus,  step: "1", title: "Add Participants", desc: "Click 'Add Participant' below and enter their name" },
             { icon: Star,      step: "2", title: "Enter Scores",     desc: "Click the ✏️ icon next to any participant to score them per category" },
             { icon: BarChart3, step: "3", title: "View Leaderboard", desc: "Rankings update automatically after every score change" },
           ].map(({ icon: Icon, step, title, desc }) => (
@@ -270,11 +353,6 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                 <Input placeholder="e.g. Ravi Kumar" value={newName}
                   onChange={(e) => setNewName(e.target.value)} className="h-9" />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Email *</label>
-                <Input placeholder="e.g. ravi@email.com" type="email" value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)} className="h-9" />
-              </div>
             </div>
 
             {/* Per-category score inputs */}
@@ -301,7 +379,7 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setShowAdd(false); setNewName(""); setNewEmail(""); setNewScores({}); }}>
+              <Button variant="outline" size="sm" onClick={() => { setShowAdd(false); setNewName(""); setNewScores({}); }}>
                 <X className="w-3.5 h-3.5 mr-1" /> Cancel
               </Button>
               <Button size="sm" onClick={handleAdd} disabled={addingParticipant}
@@ -320,16 +398,21 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
               <Users className="w-6 h-6 text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">No participants yet — click <strong>"Add Participant"</strong> above to get started</p>
+            <p className="text-sm text-muted-foreground">No participants yet — click <strong>Add Participant</strong> above to get started</p>
           </div>
         ) : scorecard.participants.length > 0 ? (
           <div className="divide-y divide-white/5">
-            {scorecard.participants.map((p, idx) => {
-              const rank  = p.rank || idx + 1;
-              const pct   = maxTotal ? Math.round((p.totalScore / maxTotal) * 100) : 0;
-              const isEdit = editIdx === idx;
+            {(() => {
+              // Calculate the denominator for percentage
+              const maxParticipantScore = Math.max(...scorecard.participants.map(part => part.totalScore || 0), 1);
+              const denominator = maxTotal > 0 ? maxTotal : maxParticipantScore;
+              
+              return scorecard.participants.map((p, idx) => {
+                const rank  = p.rank || idx + 1;
+                const pct   = Math.round((p.totalScore / denominator) * 100);
+                const isEdit = editIdx === idx;
 
-              return (
+                return (
                 <div key={idx} className={`px-5 py-4 transition-colors ${isEdit ? "bg-purple-500/5" : "hover:bg-white/2"}`}>
                   <div className="flex items-start gap-3">
                     {/* Rank badge */}
@@ -342,11 +425,10 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      {/* Name & email */}
+                      {/* Name */}
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div>
                           <p className="font-semibold text-sm">{p.name}</p>
-                          <p className="text-xs text-muted-foreground">{p.email}</p>
                         </div>
                         {/* Total score + progress */}
                         <div className="text-right shrink-0">
@@ -376,19 +458,65 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {scorecard.categories.map((c) => {
                               const cur = p.scores.find((s) => s.categoryName === c.name)?.score ?? 0;
-                              const val = editScores[c.name] !== undefined ? editScores[c.name] : cur;
-                              const catPct = c.maxScore ? Math.round((parseFloat(val) / c.maxScore) * 100) : 0;
+                              const rawDelta = editScores[c.name] ?? "";
+                              const delta = rawDelta !== "" && !Number.isNaN(parseFloat(rawDelta)) ? parseFloat(rawDelta) : 0;
+                              
+                              // Calculate projected scores for both add and deduct
+                              const addScore = cur + delta;
+                              const deductScore = cur - delta;
+                              
+                              // Check for violations
+                              const addExceedsMax = c.hasMaxScore && addScore > c.maxScore;
+                              const addBelowZero = !c.negativeMarking && addScore < 0;
+                              const deductBelowZero = !c.negativeMarking && deductScore < 0;
+                              
+                              const hasWarning = delta !== 0 && (addExceedsMax || addBelowZero || deductBelowZero);
+                              const catPct = c.hasMaxScore ? Math.round((cur / c.maxScore) * 100) : 100;
+                              
                               return (
-                                <div key={c.name} className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
-                                  <p className="text-xs text-muted-foreground mb-1 truncate">{c.name}</p>
-                                  <div className="flex items-center gap-1">
+                                <div key={c.name} className={`rounded-xl border p-3 transition-colors ${
+                                  hasWarning 
+                                    ? "border-red-500/40 bg-red-500/10" 
+                                    : "border-purple-500/20 bg-purple-500/5"
+                                }`}>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs text-muted-foreground truncate">{c.name}</p>
+                                    {hasWarning && (
+                                      <span className="text-xs text-red-400 font-medium">⚠ Invalid</span>
+                                    )}
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-muted-foreground">Current:</span>
+                                      <span className="font-semibold">
+                                        {cur}
+                                        {c.hasMaxScore && <span className="text-muted-foreground">/{c.maxScore}</span>}
+                                      </span>
+                                    </div>
                                     <input
-                                      type="number" min="0" max={c.maxScore}
-                                      value={val}
+                                      type="number"
+                                      value={rawDelta}
                                       onChange={(e) => setEditScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
-                                      className="w-full bg-transparent text-lg font-bold focus:outline-none text-center"
+                                      placeholder="0"
+                                      className={`w-full bg-transparent text-center text-sm font-bold focus:outline-none border-b pb-1 ${
+                                        hasWarning 
+                                          ? "border-red-500/50 text-red-400" 
+                                          : "border-purple-500/50"
+                                      }`}
                                     />
-                                    <span className="text-xs text-muted-foreground shrink-0">/{c.maxScore}</span>
+                                    {hasWarning && (
+                                      <div className="text-xs text-red-400 space-y-0.5 mt-2 pt-2 border-t border-red-500/20">
+                                        {addExceedsMax && (
+                                          <div>Add would reach {addScore} (max {c.maxScore})</div>
+                                        )}
+                                        {addBelowZero && (
+                                          <div>Add would go to {addScore} (minimum 0)</div>
+                                        )}
+                                        {deductBelowZero && (
+                                          <div>Deduct would go to {deductScore} (minimum 0)</div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="mt-1.5 w-full h-1 bg-white/10 rounded-full overflow-hidden">
                                     <div
@@ -400,16 +528,26 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                               );
                             })}
                           </div>
-                          <div className="flex gap-2 mt-1">
+                          <div className="flex gap-2 mt-3">
                             <Button size="sm" variant="outline" onClick={() => { setEditIdx(null); setEditScores({}); }}
                               className="h-8 gap-1">
                               <X className="w-3.5 h-3.5" /> Cancel
                             </Button>
-                            <Button size="sm" onClick={handleSaveScores} disabled={saving}
-                              className="h-8 gap-1 bg-purple-600 hover:bg-purple-700 text-white">
-                              {saving
-                                ? <><span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
-                                : <><Save className="w-3.5 h-3.5" /> Save Scores</>}
+                            <Button size="sm" onClick={handleDeductScore} disabled={saving}
+                              className="h-8 gap-1 bg-red-600 hover:bg-red-700 text-white">
+                              {saving ? (
+                                <><span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
+                              ) : (
+                                <>Deduct Score</>
+                              )}
+                            </Button>
+                            <Button size="sm" onClick={handleAddScore} disabled={saving}
+                              className="h-8 gap-1 bg-green-600 hover:bg-green-700 text-white">
+                              {saving ? (
+                                <><span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
+                              ) : (
+                                <>Add Score</>
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -420,7 +558,7 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                             {scorecard.categories.map((c) => {
                               const s = p.scores.find((sc) => sc.categoryName === c.name);
                               const score = s?.score ?? 0;
-                              const catPct = c.maxScore ? Math.round((score / c.maxScore) * 100) : 0;
+                              const catPct = c.hasMaxScore ? Math.round((score / c.maxScore) * 100) : 100;
                               return (
                                 <span key={c.name}
                                   className="text-xs px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 font-medium">
@@ -428,7 +566,9 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                                   <span className={catPct >= 80 ? "text-green-400" : catPct >= 50 ? "text-yellow-400" : "text-red-400"}>
                                     {score}
                                   </span>
-                                  <span className="text-muted-foreground">/{c.maxScore}</span>
+                                  {c.hasMaxScore && (
+                                    <span className="text-muted-foreground">/{c.maxScore}</span>
+                                  )}
                                 </span>
                               );
                             })}
@@ -450,7 +590,8 @@ export default function ScorecardManager({ scorecardId, onDelete }) {
                   </div>
                 </div>
               );
-            })}
+              });
+            })()}
           </div>
         ) : null}
       </Card>

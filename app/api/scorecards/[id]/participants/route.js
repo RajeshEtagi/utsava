@@ -42,10 +42,37 @@ export async function POST(req, { params }) {
     }
 
     const participant = scorecard.participants[participantIndex];
-    participant.scores = scores;
+
+    // Validate and normalize submitted scores according to category config
+    participant.scores = scores.map((s) => {
+      const category = scorecard.categories.find((c) => c.name === s.categoryName);
+      if (!category) {
+        throw new Error(`Unknown category: ${s.categoryName}`);
+      }
+
+      let value = Number(s.score) || 0;
+
+      if (category.hasMaxScore) {
+        const max = Number(category.maxScore) || 0;
+        const min = category.negativeMarking ? -max : 0;
+        if (value > max) value = max;
+        if (value < min) value = min;
+      } else {
+        // No max score: disallow negative values unless negativeMarking is enabled
+        if (!category.negativeMarking && value < 0) {
+          value = 0;
+        }
+      }
+
+      return {
+        categoryName: s.categoryName,
+        score: value,
+        notes: s.notes || "",
+      };
+    });
 
     // Calculate total score
-    participant.totalScore = scores.reduce(
+    participant.totalScore = participant.scores.reduce(
       (sum, score) => sum + score.score,
       0,
     );
@@ -80,7 +107,7 @@ export async function PUT(req, { params }) {
     await connectDB();
     // Next.js 15: params is a Promise and must be awaited
     const { id } = await params;
-    const { participantName, participantEmail, scores } = await req.json();
+    const { participantName, scores } = await req.json();
 
     // Convert string ID to ObjectId
     const objectId = new mongoose.Types.ObjectId(id);
@@ -97,13 +124,39 @@ export async function PUT(req, { params }) {
       );
     }
 
+    // Validate and normalize submitted scores according to category config
+    const normalizedScores = scores.map((s) => {
+      const category = scorecard.categories.find((c) => c.name === s.categoryName);
+      if (!category) {
+        throw new Error(`Unknown category: ${s.categoryName}`);
+      }
+
+      let value = Number(s.score) || 0;
+
+      if (category.hasMaxScore) {
+        const max = Number(category.maxScore) || 0;
+        const min = category.negativeMarking ? -max : 0;
+        if (value > max) value = max;
+        if (value < min) value = min;
+      } else {
+        if (!category.negativeMarking && value < 0) {
+          value = 0;
+        }
+      }
+
+      return {
+        categoryName: s.categoryName,
+        score: value,
+        notes: s.notes || "",
+      };
+    });
+
     // Add new participant
-    const totalScore = scores.reduce((sum, score) => sum + score.score, 0);
+    const totalScore = normalizedScores.reduce((sum, score) => sum + score.score, 0);
 
     scorecard.participants.push({
       name: participantName,
-      email: participantEmail,
-      scores,
+      scores: normalizedScores,
       totalScore,
     });
 

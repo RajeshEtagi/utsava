@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useConvexQuery, useConvexMutation } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { toast } from "sonner";
 import { useUser } from "@clerk/nextjs";
 

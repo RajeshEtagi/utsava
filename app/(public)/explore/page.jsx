@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, MapPin, Users, ArrowRight, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useConvexQuery } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { createLocationSlug } from "@/lib/location-utils";
 import Image from "next/image";
 

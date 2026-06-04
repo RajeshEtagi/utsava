@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { State, City } from "country-state-city";
 import { CalendarIcon, Loader2, Sparkles, ImageIcon, MapPin, Users, Ticket } from "lucide-react";
 import { useConvexMutation, useConvexQuery } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";

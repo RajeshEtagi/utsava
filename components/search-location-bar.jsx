@@ -7,7 +7,7 @@ import { Search, MapPin, Calendar, Loader2, X } from "lucide-react";
 import { State, City } from "country-state-city";
 import { format } from "date-fns";
 import { useConvexQuery, useConvexMutation } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { createLocationSlug } from "@/lib/location-utils";
 import { getCategoryIcon } from "@/lib/data";
 

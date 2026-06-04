@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -13,7 +12,6 @@ import {
   TrendingUp,
   Clock,
   Trash2,
-  QrCode,
   Loader2,
   CheckCircle,
   Download,
@@ -21,7 +19,7 @@ import {
   Eye,
 } from "lucide-react";
 import { useConvexQuery, useConvexMutation } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -31,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { getCategoryIcon, getCategoryLabel } from "@/lib/data";
-import QRScannerModal from "../_components/qr-scanner-modal";
 import { AttendeeCard } from "../_components/attendee-card";
 import ScorecardsList from "@/components/scorecards-list";
 import LiveStreamManager from "@/components/live-stream-manager";
@@ -43,7 +40,6 @@ export default function EventDashboardPage() {
 
   const [activeTab, setActiveTab] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showQRScanner, setShowQRScanner] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Fetch event dashboard data
@@ -96,7 +92,7 @@ export default function EventDashboardPage() {
     };
 
     const csvContent = [
-      ["Name", "Email", "Registered At", "Checked In", "Checked In At", "QR Code"],
+      ["Name", "Email", "Registered At", "Checked In", "Checked In At", "Ticket ID"],
       ...registrations.map((reg) => [
         reg.attendeeName,
         reg.attendeeEmail,
@@ -164,18 +160,6 @@ export default function EventDashboardPage() {
           </Button>
         </div>
 
-        {event.coverImage && (
-          <div className="relative h-[350px] rounded-2xl overflow-hidden mb-6">
-            <Image
-              src={event.coverImage}
-              alt={event.title}
-              fill
-              className="object-cover"
-              priority
-            />
-          </div>
-        )}
-
         {/* Event Header */}
         <div className="flex flex-col gap-5 sm:flex-row items-start justify-between mb-4">
           <div className="flex-1">
@@ -223,27 +207,6 @@ export default function EventDashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions - Show QR Scanner if event is today */}
-        {stats.isEventToday && !stats.isEventPast && (
-          <Button
-            size="lg"
-            className="mb-8 w-full gap-2 h-10 bg-slate-900 text-slate-50 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-            onClick={async () => {
-              try {
-                // Request camera access as a direct user gesture to ensure permissions prompt
-                await navigator.mediaDevices.getUserMedia({ video: true });
-                setShowQRScanner(true);
-              } catch (err) {
-                toast.error(
-                  "Camera access is required to scan QR codes. Please allow camera access.",
-                );
-              }
-            }}
-          >
-            <QrCode className="w-6 h-6" />
-            Scan QR Code to Check-In
-          </Button>
-        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -345,7 +308,7 @@ export default function EventDashboardPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name, email, or QR code..."
+                  placeholder="Search by name, email, or ticket ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -393,14 +356,6 @@ export default function EventDashboardPage() {
         </Tabs>
       </div>
 
-      {/* QR Scanner Modal */}
-      {showQRScanner && (
-        <QRScannerModal
-          isOpen={showQRScanner}
-          onClose={() => setShowQRScanner(false)}
-          onCheckInSuccess={() => setRefreshKey((prev) => prev + 1)}
-        />
-      )}
     </div>
   );
 }

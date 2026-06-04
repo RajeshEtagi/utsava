@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { useConvexMutation } from "@/hooks/use-convex-query";
 import { format } from "date-fns";
 import { CheckCircle, Circle, Loader2 } from "lucide-react";
@@ -14,7 +14,7 @@ export function AttendeeCard({ registration, onCheckInSuccess }) {
 
   const handleManualCheckIn = async () => {
     try {
-      const result = await checkInAttendee({ qrCode: registration.qrCode });
+      const result = await checkInAttendee({ ticketId: registration.qrCode });
       if (result.success) {
         toast.success("Attendee checked in successfully");
         onCheckInSuccess?.();
@@ -60,7 +60,7 @@ export function AttendeeCard({ registration, onCheckInSuccess }) {
                 : format(registration.createdAt, "PPp")}
             </span>
             <span className="font-mono text-muted-foreground">
-              QR: {registration.qrCode}
+              Ticket ID: {registration.qrCode}
             </span>
           </div>
         </div>

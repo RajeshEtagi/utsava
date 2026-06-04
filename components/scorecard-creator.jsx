@@ -14,11 +14,11 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categories, setCategories] = useState([
-    { name: "", maxScore: 100, description: "" },
+    { name: "", maxScore: 100, hasMaxScore: true, negativeMarking: false, description: "" },
   ]);
 
   const handleAddCategory = () => {
-    setCategories([...categories, { name: "", maxScore: 100, description: "" }]);
+    setCategories([...categories, { name: "", maxScore: 100, hasMaxScore: true, negativeMarking: false, description: "" }]);
   };
 
   const handleRemoveCategory = (index) => {
@@ -35,7 +35,7 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
     setIsOpen(false);
     setTitle("");
     setDescription("");
-    setCategories([{ name: "", maxScore: 100, description: "" }]);
+    setCategories([{ name: "", maxScore: 100, hasMaxScore: true, negativeMarking: false, description: "" }]);
   };
 
   const handleSubmit = async (e) => {
@@ -44,8 +44,14 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
       toast.error("Please enter a title");
       return;
     }
-    if (categories.some((c) => !c.name.trim() || c.maxScore <= 0)) {
-      toast.error("All categories need a name and max score > 0");
+    if (
+      categories.some(
+        (c) =>
+          !c.name.trim() ||
+          (c.hasMaxScore && (typeof c.maxScore !== "number" || c.maxScore <= 0)),
+      )
+    ) {
+      toast.error("All categories need a name and max score > 0 when max score is enabled");
       return;
     }
 
@@ -57,7 +63,12 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
         body: JSON.stringify({ eventId, title, description, categories }),
       });
 
-      if (!response.ok) throw new Error("Failed to create scorecard");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.error || response.statusText || "Failed to create scorecard",
+        );
+      }
 
       const scorecard = await response.json();
       toast.success("Scorecard created!");
@@ -71,7 +82,7 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
   };
 
   const totalMax = categories.reduce(
-    (s, c) => s + (parseInt(c.maxScore) || 0),
+    (s, c) => s + (c.hasMaxScore ? parseInt(c.maxScore || 0) : 0),
     0
   );
 
@@ -185,6 +196,19 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
                               className="h-9"
                             />
                           </div>
+                          <div className="flex flex-col gap-2">
+                            <label className="text-xs text-muted-foreground flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={category.hasMaxScore}
+                                onChange={(e) =>
+                                  handleCategoryChange(index, "hasMaxScore", e.target.checked)
+                                }
+                                className="h-4 w-4 rounded border border-white/10 bg-background"
+                              />
+                              Has max score
+                            </label>
+                          </div>
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
@@ -194,10 +218,11 @@ export default function ScorecardCreator({ eventId, onScorecardCreated }) {
                                 handleCategoryChange(
                                   index,
                                   "maxScore",
-                                  parseInt(e.target.value) || 0
+                                  parseInt(e.target.value) || 0,
                                 )
                               }
                               min="1"
+                              disabled={!category.hasMaxScore}
                               className="h-9"
                             />
                             <span className="text-xs text-muted-foreground whitespace-nowrap">

@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { MapPin, Heart, ArrowRight, ArrowLeft } from "lucide-react";
 import { useConvexMutation } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { toast } from "sonner";
 import { State, City } from "country-state-city";
 import {

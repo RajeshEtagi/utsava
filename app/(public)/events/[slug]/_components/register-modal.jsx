@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Ticket, CheckCircle } from "lucide-react";
 import { useConvexMutation } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { toast } from "sonner";
 import { useUser } from "@clerk/nextjs";
 
@@ -79,7 +79,7 @@ export default function RegisterModal({ event, isOpen, onClose }) {
               <h2 className="text-2xl font-bold mb-2">You&apos;re All Set!</h2>
               <p className="text-muted-foreground">
                 Your registration is confirmed. Check your Tickets for event
-                details and your QR code ticket.
+                details and your Ticket ID.
               </p>
             </div>
             <Separator />

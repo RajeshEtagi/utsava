@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useConvexQuery, useConvexMutation } from "./use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 
 export function useOnboarding() {
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -18,24 +16,17 @@ export function useOnboarding() {
     api.users.skipOnboarding
   );
 
-  useEffect(() => {
-    if (isLoading || !currentUser) return;
-
-    // Only show on the homepage and only if onboarding hasn't been completed
-    if (!currentUser.hasCompletedOnboarding && pathname === "/") {
-      setShowOnboarding(true);
-    } else {
-      setShowOnboarding(false);
-    }
-  }, [currentUser, pathname, isLoading]);
+  const showOnboarding =
+    !isLoading &&
+    currentUser &&
+    !currentUser.hasCompletedOnboarding &&
+    pathname === "/";
 
   const handleOnboardingComplete = () => {
-    setShowOnboarding(false);
     router.refresh();
   };
 
   const handleOnboardingSkip = async () => {
-    setShowOnboarding(false);
     try {
       // Mark as done in DB so it NEVER shows again
       await skipOnboarding({});
@@ -46,7 +37,6 @@ export function useOnboarding() {
 
   return {
     showOnboarding,
-    setShowOnboarding,
     handleOnboardingComplete,
     handleOnboardingSkip,
     needsOnboarding: currentUser && !currentUser.hasCompletedOnboarding,

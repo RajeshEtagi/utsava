@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, MapPin, Users, Trash2, X, QrCode, Eye } from "lucide-react";
+import { Calendar, MapPin, Users, Trash2, X, Ticket, Eye } from "lucide-react";
 import { format } from "date-fns";
 import Image from "next/image";
 import { getCategoryIcon, getCategoryLabel, getSubCategoryLabel } from "@/lib/data";
@@ -183,7 +183,7 @@ export default function EventCard({
                 </>
               ) : (
                 <>
-                  <QrCode className="w-4 h-4" />
+                  <Ticket className="w-4 h-4" />
                   Show Ticket
                 </>
               )}

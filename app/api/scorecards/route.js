@@ -21,12 +21,30 @@ export async function POST(req) {
       );
     }
 
+    if (
+      categories.some(
+        (c) =>
+          !c.name ||
+          (c.hasMaxScore && (typeof c.maxScore !== "number" || c.maxScore <= 0)) ||
+          typeof c.hasMaxScore !== "boolean" ||
+          typeof c.negativeMarking !== "boolean",
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Invalid category configuration" },
+        { status: 400 },
+      );
+    }
+
     const scorecard = await Scorecard.create({
       eventId,
       organizerId: userId,
       title,
       description,
-      categories,
+      categories: categories.map((c) => ({
+        ...c,
+        maxScore: c.hasMaxScore ? c.maxScore : 0,
+      })),
       status: "draft",
     });
 

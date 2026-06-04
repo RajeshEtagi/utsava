@@ -10,8 +10,13 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-function generateQRCode() {
-  return `EVT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+function generateTicketId() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let ticketId = "";
+  for (let i = 0; i < 10; i += 1) {
+    ticketId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return ticketId;
 }
 
 export async function registerForEvent(data) {
@@ -45,20 +50,21 @@ export async function registerForEvent(data) {
     const existingRegistration = await Registration.findOne({
       eventId,
       userId: user._id,
+      status: "confirmed",
     });
 
     if (existingRegistration) {
       throw new Error("You are already registered for this event");
     }
 
-    const qrCode = generateQRCode();
+    const ticketId = generateTicketId();
 
     const newRegistration = await Registration.create({
       eventId,
       userId: user._id,
       attendeeName,
       attendeeEmail,
-      qrCode,
+      qrCode: ticketId,
       status: "confirmed",
       checkedIn: false,
     });
@@ -84,8 +90,8 @@ export async function registerForEvent(data) {
               
               <div style="background-color: #fafafa; border: 1px dashed #d4d4d8; padding: 24px; margin: 32px 0; border-radius: 8px; text-align: center;">
                 <p style="text-transform: uppercase; font-size: 12px; font-weight: bold; color: #71717a; margin-top: 0; letter-spacing: 1px;">Your Ticket ID</p>
-                <p style="font-family: monospace; font-size: 24px; font-weight: bold; color: #18181b; margin: 8px 0;">${qrCode}</p>
-                <p style="font-size: 14px; color: #71717a; margin-bottom: 0;">Present this ID or scanning the QR code in the app at the door.</p>
+                <p style="font-family: monospace; font-size: 24px; font-weight: bold; color: #18181b; margin: 8px 0;">${ticketId}</p>
+                <p style="font-size: 14px; color: #71717a; margin-bottom: 0;">Present this ticket ID at the door.</p>
               </div>
 
               <h3 style="margin-top: 32px; border-bottom: 2px solid #e4e4e7; padding-bottom: 8px;">Event Details</h3>
@@ -109,7 +115,8 @@ export async function registerForEvent(data) {
       // We do not throw the error here because the Registration actually succeeded in DB
     }
 
-    revalidatePath(`/event/${event.slug}`);
+    revalidatePath(`/events/${event.slug}`);
+    revalidatePath("/my-tickets");
     revalidatePath("/dashboard");
 
     return JSON.parse(JSON.stringify(newRegistration));
@@ -135,6 +142,7 @@ export async function checkRegistration(args) {
     const registration = await Registration.findOne({
       eventId,
       userId: user._id,
+      status: "confirmed",
     });
     return registration ? JSON.parse(JSON.stringify(registration)) : null;
   } catch (error) {
@@ -152,18 +160,28 @@ export async function getMyRegistrations() {
     const user = await User.findOne({ clerkId: userId });
     if (!user) return [];
 
-    const registrations = await Registration.find({ userId: user._id })
+    const registrations = await Registration.find({
+      userId: user._id,
+      status: "confirmed",
+    })
       .sort({ createdAt: -1 })
       .populate("eventId");
 
     // The frontend expects the populated event object to be under 'event', not 'eventId'
-    const formattedRegistrations = registrations.map((reg) => {
-      const regObj = reg.toObject();
-      regObj.event = regObj.eventId;
-      // Optional: don't double send the full event object
-      regObj.eventId = regObj.eventId._id || regObj.eventId;
-      return regObj;
-    });
+    const formattedRegistrations = await Promise.all(
+      registrations.map(async (reg) => {
+        const regObj = reg.toObject();
+        let event = regObj.eventId;
+
+        if (!event || typeof event === "string") {
+          event = await Event.findById(regObj.eventId).lean();
+        }
+
+        regObj.event = event;
+        regObj.eventId = event?._id || regObj.eventId;
+        return regObj;
+      }),
+    );
 
     return JSON.parse(JSON.stringify(formattedRegistrations));
   } catch (error) {
@@ -198,6 +216,10 @@ export async function cancelRegistration(registrationId) {
       await event.save();
     }
 
+    if (event?.slug) {
+      revalidatePath(`/events/${event.slug}`);
+    }
+    revalidatePath("/my-tickets");
     revalidatePath("/dashboard");
 
     return { success: true };
@@ -233,21 +255,21 @@ export async function getEventRegistrations(args) {
 
 export async function checkInAttendee(args) {
   try {
-    let { qrCode } = args;
+    let { ticketId } = args;
     const { userId } = await auth();
     if (!userId) throw new Error("Unauthorized");
 
     // Normalize code for consistent lookup (trim + uppercase)
-    if (typeof qrCode === "string") {
-      qrCode = qrCode.trim().toUpperCase();
+    if (typeof ticketId === "string") {
+      ticketId = ticketId.trim().toUpperCase();
     }
 
     await connectDB();
     const user = await User.findOne({ clerkId: userId });
 
-    const registration = await Registration.findOne({ qrCode });
+    const registration = await Registration.findOne({ qrCode: ticketId });
     if (!registration) {
-      throw new Error("Invalid QR code");
+      throw new Error("Invalid ticket ID");
     }
 
     const event = await Event.findById(registration.eventId);

@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Calendar, MapPin, Loader2, Ticket } from "lucide-react";
 import { useConvexQuery, useConvexMutation } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { toast } from "sonner";
-import QRCode from "react-qr-code";
+
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,8 +37,9 @@ export default function MyTicketsPage() {
       return;
 
     try {
-      await cancelRegistration({ registrationId });
+      await cancelRegistration(registrationId);
       toast.success("Registration cancelled successfully.");
+      router.refresh();
     } catch (error) {
       toast.error(error.message || "Failed to cancel registration");
     }
@@ -54,20 +55,33 @@ export default function MyTicketsPage() {
 
   const now = Date.now();
 
-  // Treat an event as "upcoming" until it has fully ended (endDate in the future)
-  const upcomingTickets = registrations?.filter(
-    (reg) =>
-      reg.event &&
-      new Date(reg.event.endDate).getTime() >= now &&
-      reg.status === "confirmed",
+  const getEventTimestamp = (value) => {
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === "number") return value;
+    if (typeof value === "string") return Date.parse(value);
+    return NaN;
+  };
+
+  const getEventEndTime = (event) => {
+    if (!event) return NaN;
+    return getEventTimestamp(event.endDate ?? event.startDate);
+  };
+
+  const isEventEnded = (event) => {
+    const endTime = getEventEndTime(event);
+    return Number.isFinite(endTime) && endTime <= now;
+  };
+
+  // Cancelled registrations are filtered out by the server action.
+  const ticketsWithEvents = registrations?.filter((reg) => reg.event) ?? [];
+
+  const upcomingTickets = ticketsWithEvents.filter(
+    (reg) => reg.status === "confirmed" && !isEventEnded(reg.event),
   );
 
-  // Past tickets include events that have ended or registrations that were cancelled
-  const pastTickets = registrations?.filter(
-    (reg) =>
-      reg.event &&
-      (new Date(reg.event.endDate).getTime() < now ||
-        reg.status === "cancelled"),
+  // Past tickets include active registrations for events that have ended.
+  const pastTickets = ticketsWithEvents.filter(
+    (reg) => reg.status === "confirmed" && isEventEnded(reg.event),
   );
 
   return (
@@ -137,7 +151,7 @@ export default function MyTicketsPage() {
         )}
       </div>
 
-      {/* QR Code Modal */}
+      {/* Ticket Modal */}
       {selectedTicket && (
         <Dialog
           open={!!selectedTicket}
@@ -170,10 +184,6 @@ export default function MyTicketsPage() {
                 )}
               </div>
 
-              <div className="flex justify-center p-6 bg-white rounded-lg">
-                <QRCode value={selectedTicket.qrCode} size={200} level="H" />
-              </div>
-
               <div className="text-center">
                 <p className="text-xs text-muted-foreground mb-1">Ticket ID</p>
                 <p className="font-mono text-sm">{selectedTicket.qrCode}</p>
@@ -199,9 +209,6 @@ export default function MyTicketsPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-muted-foreground text-center">
-                Show this QR code at the event entrance for check-in
-              </p>
             </div>
           </DialogContent>
         </Dialog>

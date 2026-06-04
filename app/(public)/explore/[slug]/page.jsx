@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { useState, useMemo } from "react";
 import { Loader2, MapPin } from "lucide-react";
 import { useConvexQuery } from "@/hooks/use-convex-query";
-import { api } from "@/lib/api";
+import * as api from "@/lib/api";
 import { CATEGORIES } from "@/lib/data";
 import { parseLocationSlug } from "@/lib/location-utils";
 import { Badge } from "@/components/ui/badge";

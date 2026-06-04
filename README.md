@@ -10,7 +10,7 @@ Utsava is a delightful, modern, responsive AI-powered event organizer and manage
 - **Onboarding System**: Personalized user interest configuration.
 - **Robust Searching & Filtering**: Find events by category, query, state, or city.
 - **Advanced Dashboard**: Full control over attendees, real-time scorecard management, live stream manager, and CSV exports.
-- **Secure Ticketing**: Auto-generated registration tickets with QR codes for seamless check-in.
+- **Secure Ticketing**: Auto-generated registration tickets with ticket IDs for seamless check-in.
 - **Security Checkpoints**: Organizers only have authorization to manage, check-in, or delete their events.
 
 ---

@@ -24,6 +24,8 @@ const ScorecardSchema = new mongoose.Schema(
       {
         name: { type: String, required: true },
         maxScore: { type: Number, required: true, min: 0 },
+        hasMaxScore: { type: Boolean, default: true },
+        negativeMarking: { type: Boolean, default: false },
         description: { type: String, default: "" },
       },
     ],
@@ -33,11 +35,11 @@ const ScorecardSchema = new mongoose.Schema(
           type: String,
         },
         name: { type: String, required: true },
-        email: { type: String, required: true },
+        email: { type: String, default: "" },
         scores: [
           {
             categoryName: { type: String, required: true },
-            score: { type: Number, required: true, min: 0 },
+            score: { type: Number, required: true },
             notes: { type: String, default: "" },
           },
         ],
