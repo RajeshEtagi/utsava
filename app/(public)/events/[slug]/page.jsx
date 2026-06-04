@@ -138,6 +138,9 @@ export default function EventDetailPage() {
   const isEventFull = event.registrationCount >= event.capacity;
   const isEventPast = new Date(event.endDate) < new Date();
   const isOrganizer = dbUser?._id?.toString() === event.organizerId?.toString();
+  const registrationStatus =
+    registration?.status === "confirmed" ? "approved" : registration?.status;
+  const hasApprovedRegistration = registrationStatus === "approved";
 
   return (
     <div className="min-h-screen py-10">
@@ -179,8 +182,28 @@ export default function EventDetailPage() {
         <div className="grid lg:grid-cols-[1fr_380px] gap-8">
           {/* Main Content */}
           <div className="space-y-8">
-            {/* Live Stream Embed (shown if organizer has set one) */}
-            <LiveStreamViewer eventId={event._id} />
+            {/* Live Stream Embed (shown to approved participants) */}
+            {hasApprovedRegistration || isOrganizer ? (
+              <LiveStreamViewer eventId={event._id} />
+            ) : registrationStatus === "pending" ? (
+              <Card className="border-amber-200 bg-amber-50">
+                <CardContent className="pt-6">
+                  <p className="font-semibold text-amber-900">Participant access pending</p>
+                  <p className="text-sm text-amber-800 mt-1">
+                    Your registration is waiting for organizer approval. Participant-only content will unlock after approval.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : registrationStatus === "rejected" ? (
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="pt-6">
+                  <p className="font-semibold text-red-900">Registration rejected</p>
+                  <p className="text-sm text-red-800 mt-1">
+                    The organizer rejected this registration, so participant-only content is not available.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
 
             {/* Description */}
             <Card className="border shadow-sm">
@@ -306,18 +329,37 @@ export default function EventDetailPage() {
                 {/* Registration Button */}
                 {registration ? (
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg">
+                    <div
+                      className={`flex items-center gap-2 p-3 rounded-lg ${
+                        hasApprovedRegistration
+                          ? "text-green-600 bg-green-50"
+                          : registrationStatus === "pending"
+                            ? "text-amber-700 bg-amber-50"
+                            : "text-red-600 bg-red-50"
+                      }`}
+                    >
                       <CheckCircle className="w-5 h-5" />
                       <span className="font-medium">
-                        You&apos;re registered!
+                        {hasApprovedRegistration
+                          ? "You are approved!"
+                          : registrationStatus === "pending"
+                            ? "Registration pending approval"
+                            : "Registration rejected"}
                       </span>
                     </div>
+                    {!hasApprovedRegistration && (
+                      <p className="text-sm text-muted-foreground">
+                        {registrationStatus === "pending"
+                          ? "The organizer needs to approve your registration before you can access participant features."
+                          : "You cannot access participant features for this event."}
+                      </p>
+                    )}
                     <Button
                       className="w-full gap-2"
                       onClick={() => router.push("/my-tickets")}
                     >
                       <Ticket className="w-4 h-4" />
-                      View Ticket
+                      View Registration
                     </Button>
                   </div>
                 ) : isEventPast ? (

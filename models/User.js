@@ -20,10 +20,6 @@ const UserSchema = new mongoose.Schema(
     imageUrl: {
       type: String,
     },
-    hasCompletedOnboarding: {
-      type: Boolean,
-      default: false,
-    },
     location: {
       city: String,
       state: String,

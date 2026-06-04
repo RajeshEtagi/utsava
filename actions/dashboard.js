@@ -20,10 +20,20 @@ export async function getEventDashboard(args) {
 
     await connectDB();
 
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await User.findOne({ clerkId: userId });
+    if (!user) throw new Error("User not found");
+
     // Fetch the event
     const event = await Event.findById(eventId).lean();
     if (!event) {
       throw new Error("Event not found");
+    }
+
+    if (event.organizerId.toString() !== user._id.toString()) {
+      throw new Error("Not authorized to view this dashboard");
     }
 
     // Convert ObjectIds to strings for client components
@@ -33,15 +43,19 @@ export async function getEventDashboard(args) {
       organizerId: event.organizerId.toString(),
     };
 
-    // Calculate stats
-    // Fetch all confirmed registrations for the event
-    const registrations = await Registration.find({ 
-      eventId, 
-      status: "confirmed" 
-    }).lean();
+    const registrations = await Registration.find({ eventId }).lean();
+    const approvedRegistrations = registrations.filter((registration) =>
+      ["approved", "confirmed"].includes(registration.status),
+    );
+    const pendingApprovalCount = registrations.filter(
+      (registration) => registration.status === "pending",
+    ).length;
+    const rejectedCount = registrations.filter(
+      (registration) => registration.status === "rejected",
+    ).length;
 
-    const totalRegistrations = registrations.length;
-    const checkedInCount = registrations.filter((r) => r.checkedIn).length;
+    const totalRegistrations = approvedRegistrations.length;
+    const checkedInCount = approvedRegistrations.filter((r) => r.checkedIn).length;
     const pendingCount = totalRegistrations - checkedInCount;
 
     // Revenue calculation (only applicable for paid events)
@@ -77,6 +91,8 @@ export async function getEventDashboard(args) {
       totalRegistrations,
       checkedInCount,
       pendingCount,
+      pendingApprovalCount,
+      rejectedCount,
       capacity: event.capacity,
       totalRevenue,
       checkInRate,

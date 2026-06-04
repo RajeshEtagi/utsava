@@ -77,63 +77,6 @@ export async function setUserRole(role) {
   }
 }
 
-export async function completeOnboarding(location, interests) {
-  try {
-    const { userId } = await auth();
-
-    if (!userId) {
-      throw new Error("Unauthorized");
-    }
-
-    await connectDB();
-
-    const updatedUser = await User.findOneAndUpdate(
-      { clerkId: userId },
-      {
-        location,
-        interests,
-        hasCompletedOnboarding: true,
-      },
-      { new: true },
-    );
-
-    if (!updatedUser) {
-      throw new Error("User not found");
-    }
-
-    revalidatePath("/"); // Revalidate homepage to clear any onboarding banners
-
-    return { success: true, userId: updatedUser._id.toString() };
-  } catch (error) {
-    console.error("Error completing onboarding:", error);
-    throw new Error("Failed to complete onboarding");
-  }
-}
-
-export async function skipOnboarding() {
-  try {
-    const { userId } = await auth();
-
-    if (!userId) {
-      throw new Error("Unauthorized");
-    }
-
-    await connectDB();
-
-    await User.findOneAndUpdate(
-      { clerkId: userId },
-      { hasCompletedOnboarding: true },
-      { new: true }
-    );
-
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    console.error("Error skipping onboarding:", error);
-    throw new Error("Failed to skip onboarding");
-  }
-}
-
 export async function updateUserLocation(location) {
   try {
     const { userId } = await auth();

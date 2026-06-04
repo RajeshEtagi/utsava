@@ -90,15 +90,18 @@ export default function SearchLocationBar() {
   };
 
   const handleLocationSelect = useCallback(async (city, state) => {
-    try {
-      // #6 fix: only update location, don't touch interests
-      await updateLocation({ city, state, country: "India" });
-      const slug = createLocationSlug(city, state);
-      router.push(`/explore/${slug}`);
-    } catch (error) {
-      console.error("Failed to update location:", error);
+    const slug = createLocationSlug(city, state);
+
+    if (currentUser) {
+      try {
+        await updateLocation({ city, state, country: "India" });
+      } catch (error) {
+        console.error("Failed to update location:", error);
+      }
     }
-  }, [updateLocation, router]);
+
+    router.push(`/explore/${slug}`);
+  }, [currentUser, router, updateLocation]);
 
   // #11 fix: clear state and city
   const handleClearLocation = useCallback(() => {

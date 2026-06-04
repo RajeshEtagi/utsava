@@ -9,6 +9,8 @@ import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const ACTIVE_REGISTRATION_STATUSES = ["pending", "approved"];
+const APPROVED_REGISTRATION_STATUSES = ["approved", "confirmed"];
 
 function generateTicketId() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -43,14 +45,19 @@ export async function registerForEvent(data) {
       );
     }
 
-    if (event.registrationCount >= event.capacity) {
+    const approvedCount = await Registration.countDocuments({
+      eventId,
+      status: { $in: APPROVED_REGISTRATION_STATUSES },
+    });
+
+    if (approvedCount >= event.capacity) {
       throw new Error("Event is full");
     }
 
     const existingRegistration = await Registration.findOne({
       eventId,
       userId: user._id,
-      status: "confirmed",
+      status: { $in: ACTIVE_REGISTRATION_STATUSES },
     });
 
     if (existingRegistration) {
@@ -65,33 +72,29 @@ export async function registerForEvent(data) {
       attendeeName,
       attendeeEmail,
       qrCode: ticketId,
-      status: "confirmed",
       checkedIn: false,
     });
 
-    event.registrationCount += 1;
-    await event.save();
-
-    // Send confirmation email asynchronously
+    // Send request received email asynchronously
     try {
       await resend.emails.send({
         from: "Utsava Events <onboarding@resend.dev>",
         to: attendeeEmail,
-        subject: `Ticket Confirmation: ${event.title}`,
+        subject: `Registration Pending: ${event.title}`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
             <div style="background-color: #f4f4f5; padding: 24px; border-radius: 8px 8px 0 0; text-align: center;">
-              <h1 style="margin: 0; color: #18181b; font-size: 24px;">🎟️ You're Going to ${event.title}!</h1>
+              <h1 style="margin: 0; color: #18181b; font-size: 24px;">Registration Received</h1>
             </div>
             
             <div style="padding: 32px 24px; border: 1px solid #e4e4e7; border-top: none; border-radius: 0 0 8px 8px;">
               <p style="font-size: 16px; line-height: 1.5;">Hi <strong>${attendeeName}</strong>,</p>
-              <p style="font-size: 16px; line-height: 1.5;">Your registration for <strong>${event.title}</strong> is confirmed. We can't wait to see you there!</p>
+              <p style="font-size: 16px; line-height: 1.5;">Your registration for <strong>${event.title}</strong> is pending organizer approval. You will be able to access participant-only features after approval.</p>
               
               <div style="background-color: #fafafa; border: 1px dashed #d4d4d8; padding: 24px; margin: 32px 0; border-radius: 8px; text-align: center;">
-                <p style="text-transform: uppercase; font-size: 12px; font-weight: bold; color: #71717a; margin-top: 0; letter-spacing: 1px;">Your Ticket ID</p>
+                <p style="text-transform: uppercase; font-size: 12px; font-weight: bold; color: #71717a; margin-top: 0; letter-spacing: 1px;">Request ID</p>
                 <p style="font-family: monospace; font-size: 24px; font-weight: bold; color: #18181b; margin: 8px 0;">${ticketId}</p>
-                <p style="font-size: 14px; color: #71717a; margin-bottom: 0;">Present this ticket ID at the door.</p>
+                <p style="font-size: 14px; color: #71717a; margin-bottom: 0;">This becomes your ticket ID after approval.</p>
               </div>
 
               <h3 style="margin-top: 32px; border-bottom: 2px solid #e4e4e7; padding-bottom: 8px;">Event Details</h3>
@@ -116,6 +119,7 @@ export async function registerForEvent(data) {
     }
 
     revalidatePath(`/events/${event.slug}`);
+    revalidatePath(`/my-events/${event._id}`);
     revalidatePath("/my-tickets");
     revalidatePath("/dashboard");
 
@@ -142,7 +146,7 @@ export async function checkRegistration(args) {
     const registration = await Registration.findOne({
       eventId,
       userId: user._id,
-      status: "confirmed",
+      status: { $ne: "cancelled" },
     });
     return registration ? JSON.parse(JSON.stringify(registration)) : null;
   } catch (error) {
@@ -162,7 +166,7 @@ export async function getMyRegistrations() {
 
     const registrations = await Registration.find({
       userId: user._id,
-      status: "confirmed",
+      status: { $ne: "cancelled" },
     })
       .sort({ createdAt: -1 })
       .populate("eventId");
@@ -206,12 +210,17 @@ export async function cancelRegistration(registrationId) {
       throw new Error("Not authorized to cancel this registration");
     }
 
+    if (registration.checkedIn) {
+      throw new Error("Cannot cancel registration after check-in");
+    }
+
     const event = await Event.findById(registration.eventId);
 
+    const wasApproved = APPROVED_REGISTRATION_STATUSES.includes(registration.status);
     registration.status = "cancelled";
     await registration.save();
 
-    if (event && event.registrationCount > 0) {
+    if (wasApproved && event && event.registrationCount > 0) {
       event.registrationCount -= 1;
       await event.save();
     }
@@ -245,7 +254,9 @@ export async function getEventRegistrations(args) {
       throw new Error("Not authorized to view registrations");
     }
 
-    const registrations = await Registration.find({ eventId });
+    const registrations = await Registration.find({ eventId })
+      .sort({ createdAt: -1 })
+      .populate("reviewedBy", "name email");
     return JSON.parse(JSON.stringify(registrations));
   } catch (error) {
     console.error("Error fetching event registrations:", error);
@@ -279,6 +290,14 @@ export async function checkInAttendee(args) {
       throw new Error("Not authorized to check in attendees");
     }
 
+    if (!APPROVED_REGISTRATION_STATUSES.includes(registration.status)) {
+      throw new Error("Only approved registrations can be checked in");
+    }
+
+    if (registration.status === "confirmed") {
+      registration.status = "approved";
+    }
+
     if (registration.checkedIn) {
       return {
         success: false,
@@ -299,5 +318,72 @@ export async function checkInAttendee(args) {
   } catch (error) {
     console.error("Error checking in attendee:", error);
     throw new Error(error.message || "Check-in failed");
+  }
+}
+
+export async function reviewRegistration(args) {
+  try {
+    const { registrationId, status } = args;
+    if (!["approved", "rejected"].includes(status)) {
+      throw new Error("Invalid review status");
+    }
+
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    await connectDB();
+    const user = await User.findOne({ clerkId: userId });
+    if (!user) throw new Error("User not found");
+
+    const registration = await Registration.findById(registrationId);
+    if (!registration) throw new Error("Registration not found");
+
+    const event = await Event.findById(registration.eventId);
+    if (!event) throw new Error("Event not found");
+
+    if (event.organizerId.toString() !== user._id.toString()) {
+      throw new Error("Not authorized to review this registration");
+    }
+
+    const wasApproved = APPROVED_REGISTRATION_STATUSES.includes(registration.status);
+
+    if (status === "approved" && !wasApproved) {
+      const approvedCount = await Registration.countDocuments({
+        eventId: event._id,
+        status: { $in: APPROVED_REGISTRATION_STATUSES },
+      });
+
+      if (approvedCount >= event.capacity) {
+        throw new Error("Event is full. Reject or cancel an approved registration before approving another.");
+      }
+    }
+
+    registration.status = status;
+    registration.reviewedAt = new Date();
+    registration.reviewedBy = user._id;
+    registration.reviewedByName = user.name;
+    registration.checkedIn = status === "approved" ? registration.checkedIn : false;
+    if (status !== "approved") {
+      registration.checkedInAt = undefined;
+    }
+    await registration.save();
+
+    if (!wasApproved && status === "approved") {
+      event.registrationCount += 1;
+      await event.save();
+    } else if (wasApproved && status === "rejected" && event.registrationCount > 0) {
+      event.registrationCount -= 1;
+      await event.save();
+    }
+
+    revalidatePath(`/events/${event.slug}`);
+    revalidatePath(`/my-events/${event._id}`);
+    revalidatePath("/my-tickets");
+    revalidatePath("/dashboard");
+
+    return JSON.parse(JSON.stringify(registration));
+  } catch (error) {
+    console.error("Error reviewing registration:", error);
+    throw new Error(error.message || "Failed to review registration");
   }
 }

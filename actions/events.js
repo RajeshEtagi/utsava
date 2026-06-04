@@ -66,7 +66,13 @@ export async function getEventBySlug({ slug }) {
     await connectDB()
     const event = await Event.findOne({ slug })
     if (!event) return null
-    return JSON.parse(JSON.stringify(event))
+    const approvedCount = await Registration.countDocuments({
+      eventId: event._id,
+      status: { $in: ['approved', 'confirmed'] },
+    })
+    const eventObj = event.toObject()
+    eventObj.registrationCount = approvedCount
+    return JSON.parse(JSON.stringify(eventObj))
   } catch (error) {
     console.error('Error fetching event by slug:', error)
     return null
@@ -83,7 +89,22 @@ export async function getMyEvents() {
     if (!user) return []
 
     const events = await Event.find({ organizerId: user._id }).sort({ createdAt: -1 })
-    return JSON.parse(JSON.stringify(events))
+    const eventObjects = events.map((event) => event.toObject())
+    const counts = await Registration.aggregate([
+      {
+        $match: {
+          eventId: { $in: eventObjects.map((event) => event._id) },
+          status: { $in: ['approved', 'confirmed'] },
+        },
+      },
+      { $group: { _id: '$eventId', count: { $sum: 1 } } },
+    ])
+    const countByEvent = new Map(counts.map((item) => [item._id.toString(), item.count]))
+    const eventsWithCounts = eventObjects.map((event) => ({
+      ...event,
+      registrationCount: countByEvent.get(event._id.toString()) || 0,
+    }))
+    return JSON.parse(JSON.stringify(eventsWithCounts))
   } catch (error) {
     console.error('Error fetching my events:', error)
     return []

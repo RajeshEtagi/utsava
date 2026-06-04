@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Ticket, CheckCircle } from "lucide-react";
+import { Loader2, Ticket, Clock } from "lucide-react";
 import { useConvexMutation } from "@/hooks/use-convex-query";
 import * as api from "@/lib/api";
 import { toast } from "sonner";
@@ -55,7 +55,7 @@ export default function RegisterModal({ event, isOpen, onClose }) {
       });
 
       setIsSuccess(true);
-      toast.success("Registration successful! 🎉");
+      toast.success("Registration submitted for approval.");
     } catch (error) {
       toast.error(error.message || "Registration failed");
     }
@@ -72,14 +72,14 @@ export default function RegisterModal({ event, isOpen, onClose }) {
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-md">
           <div className="flex flex-col items-center text-center space-y-4 py-6">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
+              <Clock className="w-8 h-8 text-amber-600" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold mb-2">You&apos;re All Set!</h2>
+              <h2 className="text-2xl font-bold mb-2">Registration Submitted</h2>
               <p className="text-muted-foreground">
-                Your registration is confirmed. Check your Tickets for event
-                details and your Ticket ID.
+                Your registration is pending organizer approval. Participant-only
+                content and check-in will unlock after approval.
               </p>
             </div>
             <Separator />

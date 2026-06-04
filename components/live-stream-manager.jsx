@@ -190,7 +190,7 @@ export default function LiveStreamManager({ eventId }) {
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-white/3 border border-white/10 rounded-lg px-3 py-2">
             <Eye className="w-3.5 h-3.5 shrink-0" />
             <span>
-              This video is visible to <strong>all registered participants</strong> on the public event page.
+              This video is visible to <strong>approved participants</strong> on the public event page.
               If this is a live stream, it will show as live when YouTube is streaming.
             </span>
           </div>

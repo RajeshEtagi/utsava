@@ -92,11 +92,24 @@ export default function EventDashboardPage() {
     };
 
     const csvContent = [
-      ["Name", "Email", "Registered At", "Checked In", "Checked In At", "Ticket ID"],
+      [
+        "Name",
+        "Email",
+        "Status",
+        "Registered At",
+        "Reviewed At",
+        "Reviewed By",
+        "Checked In",
+        "Checked In At",
+        "Ticket ID",
+      ],
       ...registrations.map((reg) => [
         reg.attendeeName,
         reg.attendeeEmail,
+        reg.status === "confirmed" ? "approved" : reg.status,
         format(new Date(reg.createdAt), "PPp"),
+        reg.reviewedAt ? format(new Date(reg.reviewedAt), "PPp") : "-",
+        reg.reviewedByName || reg.reviewedBy?.name || "-",
         reg.checkedIn ? "Yes" : "No",
         reg.checkedInAt ? format(new Date(reg.checkedInAt), "PPp") : "-",
         reg.qrCode,
@@ -131,16 +144,18 @@ export default function EventDashboardPage() {
 
   // Filter registrations based on active tab and search
   const filteredRegistrations = registrations?.filter((reg) => {
+    const status = reg.status === "confirmed" ? "approved" : reg.status;
     const matchesSearch =
       reg.attendeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       reg.attendeeEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
       reg.qrCode.toLowerCase().includes(searchQuery.toLowerCase());
 
-    if (activeTab === "all") return matchesSearch && reg.status === "confirmed";
+    if (activeTab === "all") return matchesSearch;
+    if (activeTab === "approved") return matchesSearch && status === "approved";
     if (activeTab === "checked-in")
-      return matchesSearch && reg.checkedIn && reg.status === "confirmed";
-    if (activeTab === "pending")
-      return matchesSearch && !reg.checkedIn && reg.status === "confirmed";
+      return matchesSearch && reg.checkedIn && status === "approved";
+    if (activeTab === "pending") return matchesSearch && status === "pending";
+    if (activeTab === "rejected") return matchesSearch && status === "rejected";
 
     return matchesSearch;
   });
@@ -283,27 +298,33 @@ export default function EventDashboardPage() {
           </Card>
         </div>
 
-        {/* Attendee Management and Scorecards */}
+        {/* Event Management and Scorecards */}
         <h2 className="text-2xl font-bold mb-4">Event Management</h2>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 flex h-auto flex-wrap">
             <TabsTrigger value="all">
-              All Attendees ({stats.totalRegistrations})
+              All ({registrations?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="pending">
+              Pending ({stats.pendingApprovalCount || 0})
+            </TabsTrigger>
+            <TabsTrigger value="approved">
+              Approved ({stats.totalRegistrations})
+            </TabsTrigger>
+            <TabsTrigger value="rejected">
+              Rejected ({stats.rejectedCount || 0})
             </TabsTrigger>
             <TabsTrigger value="checked-in">
               Checked In ({stats.checkedInCount})
-            </TabsTrigger>
-            <TabsTrigger value="pending">
-              Pending ({stats.pendingCount})
             </TabsTrigger>
             <TabsTrigger value="scorecards">Scorecards</TabsTrigger>
             <TabsTrigger value="livestream">🔴 Live Stream</TabsTrigger>
           </TabsList>
 
           {/* Search and Actions */}
-          {activeTab !== "scorecards" && (
+          {activeTab !== "scorecards" && activeTab !== "livestream" && (
             <div className="flex gap-3 mb-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -326,7 +347,7 @@ export default function EventDashboardPage() {
           )}
 
           {/* Attendee List */}
-          {activeTab !== "scorecards" && (
+          {activeTab !== "scorecards" && activeTab !== "livestream" && (
             <TabsContent value={activeTab} className="space-y-3 mt-0">
               {filteredRegistrations && filteredRegistrations.length > 0 ? (
                 filteredRegistrations.map((registration) => (

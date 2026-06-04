@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -72,17 +73,29 @@ export default function MyTicketsPage() {
     return Number.isFinite(endTime) && endTime <= now;
   };
 
+  const getStatusLabel = (status) => (status === "confirmed" ? "approved" : status);
+
+  const getStatusClassName = (status) => {
+    const normalized = getStatusLabel(status);
+    if (normalized === "approved") return "bg-green-100 text-green-800 border-green-200";
+    if (normalized === "pending") return "bg-amber-100 text-amber-800 border-amber-200";
+    if (normalized === "rejected") return "bg-red-100 text-red-800 border-red-200";
+    return "bg-gray-100 text-gray-700 border-gray-200";
+  };
+
   // Cancelled registrations are filtered out by the server action.
   const ticketsWithEvents = registrations?.filter((reg) => reg.event) ?? [];
 
   const upcomingTickets = ticketsWithEvents.filter(
-    (reg) => reg.status === "confirmed" && !isEventEnded(reg.event),
+    (reg) => getStatusLabel(reg.status) === "approved" && !isEventEnded(reg.event),
   );
 
   // Past tickets include active registrations for events that have ended.
   const pastTickets = ticketsWithEvents.filter(
-    (reg) => reg.status === "confirmed" && isEventEnded(reg.event),
+    (reg) => getStatusLabel(reg.status) === "approved" && isEventEnded(reg.event),
   );
+  const pendingTickets = ticketsWithEvents.filter((reg) => reg.status === "pending");
+  const rejectedTickets = ticketsWithEvents.filter((reg) => reg.status === "rejected");
 
   return (
     <div className="min-h-screen pb-20 px-4">
@@ -95,6 +108,23 @@ export default function MyTicketsPage() {
         </div>
 
         {/* Upcoming Tickets */}
+        {pendingTickets?.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold mb-4">Pending Approval</h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {pendingTickets.map((registration) => (
+                <EventCard
+                  key={registration._id}
+                  event={registration.event}
+                  action="ticket"
+                  onClick={() => setSelectedTicket(registration)}
+                  onDelete={() => handleCancelRegistration(registration._id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {upcomingTickets?.length > 0 && (
           <div className="mb-12">
             <h2 className="text-2xl font-bold mb-4">Upcoming Events</h2>
@@ -106,7 +136,7 @@ export default function MyTicketsPage() {
                   event={registration.event}
                   action="ticket"
                   onClick={() => setSelectedTicket(registration)}
-                  onDelete={() => handleCancelRegistration(registration._id)}
+                  onDelete={!registration.checkedIn ? () => handleCancelRegistration(registration._id) : null}
                 />
               ))}
             </div>
@@ -132,8 +162,28 @@ export default function MyTicketsPage() {
           </div>
         )}
 
+        {rejectedTickets?.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold mb-4">Rejected Registrations</h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {rejectedTickets.map((registration) => (
+                <EventCard
+                  key={registration._id}
+                  event={registration.event}
+                  action="ticket"
+                  onClick={() => setSelectedTicket(registration)}
+                  className="opacity-70"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Empty State */}
-        {!upcomingTickets?.length && !pastTickets?.length && (
+        {!pendingTickets?.length &&
+          !upcomingTickets?.length &&
+          !pastTickets?.length &&
+          !rejectedTickets?.length && (
           <Card className="p-12 text-center">
             <div className="max-w-md mx-auto space-y-4">
               <div className="text-6xl mb-4">🎟️</div>
@@ -148,7 +198,7 @@ export default function MyTicketsPage() {
               </Button>
             </div>
           </Card>
-        )}
+          )}
       </div>
 
       {/* Ticket Modal */}
@@ -164,22 +214,33 @@ export default function MyTicketsPage() {
 
             <div className="space-y-4">
               <div className="text-center">
+                <Badge className={`mb-3 capitalize ${getStatusClassName(selectedTicket.status)}`}>
+                  {getStatusLabel(selectedTicket.status)}
+                </Badge>
                 <p className="font-semibold mb-1">
                   {selectedTicket.attendeeName}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {selectedTicket.event.title}
                 </p>
-                {selectedTicket.checkedIn ? (
+                {selectedTicket.status === "pending" ? (
+                  <p className="mt-2 text-sm font-semibold text-amber-700">
+                    Your registration is waiting for organizer approval. Participant-only content and check-in will unlock after approval.
+                  </p>
+                ) : selectedTicket.status === "rejected" ? (
+                  <p className="mt-2 text-sm font-semibold text-red-600">
+                    This registration was rejected by the organizer. Please contact the organizer if you need help.
+                  </p>
+                ) : selectedTicket.checkedIn ? (
                   <p className="mt-2 text-sm font-semibold text-green-600">
-                    ✅ Checked in at{" "}
+                    Checked in at{" "}
                     {selectedTicket.checkedInAt
                       ? format(selectedTicket.checkedInAt, "PPp")
                       : "—"}
                   </p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    ❌ Not checked in yet
+                    Not checked in yet
                   </p>
                 )}
               </div>

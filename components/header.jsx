@@ -2,20 +2,15 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Building, Crown, Plus, Sparkles, Ticket } from "lucide-react";
+import { Building, Crown, Plus, Ticket } from "lucide-react";
 import { SignInButton, useAuth, UserButton, useUser } from "@clerk/nextjs";
 import { BarLoader } from "react-spinners";
-import { useOnboarding } from "@/hooks/use-onboarding";
-import OnboardingModal from "./onboarding-modal";
 import SearchLocationBar from "./search-location-bar";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { Badge } from "./ui/badge";
 
 export default function Header() {
-  const { showOnboarding, handleOnboardingComplete, handleOnboardingSkip } =
-    useOnboarding();
-
   const { has } = useAuth();
   const { isLoaded, isSignedIn } = useUser();
   const hasPro = has?.({ plan: "pro" });
@@ -127,12 +122,6 @@ export default function Header() {
         </div>
       </nav>
 
-      {/* Onboarding Modal */}
-      <OnboardingModal
-        isOpen={showOnboarding}
-        onClose={handleOnboardingSkip}
-        onComplete={handleOnboardingComplete}
-      />
     </>
   );
 }
